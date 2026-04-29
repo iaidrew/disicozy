@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, onSnapshot, orderBy, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { 
+  collection, query, onSnapshot, orderBy, doc, updateDoc, setDoc, serverTimestamp 
+} from 'firebase/firestore';
 import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { db, auth } from '../../lib/firebase';
 import { Order } from '../../types';
@@ -653,14 +655,24 @@ function SystemSettings({ config }: { config: any }) {
     const [localConfig, setLocalConfig] = useState(config);
     const [saving, setSaving] = useState(false);
     const [newAdmin, setNewAdmin] = useState('');
+    const hasChanges = JSON.stringify(localConfig) !== JSON.stringify(config);
+
+    // Update local state when remote config changes, but only if not currently editing/saving
+    useEffect(() => {
+        if (!saving) {
+            setLocalConfig(config);
+        }
+    }, [config, saving]);
 
     const handleSave = async () => {
         setSaving(true);
         try {
-            await updateDoc(doc(db, 'settings', 'global'), localConfig);
-            alert('Settings synchronized! 🚀');
+            // Use setDoc with merge: true to handle cases where the document might not exist
+            await setDoc(doc(db, 'settings', 'global'), localConfig, { merge: true });
+            alert('Enterprise configuration synchronized! 🚀');
         } catch (e) {
-            console.error(e);
+            console.error("Settings Sync Error:", e);
+            alert('Failed to sync settings. Ensure you have administrative privileges.');
         } finally {
             setSaving(false);
         }
@@ -673,10 +685,15 @@ function SystemSettings({ config }: { config: any }) {
                     <h3 className="text-2xl font-display font-black text-gray-900 italic tracking-tight">Enterprise Infrastructure ⚙️</h3>
                     <button 
                         onClick={handleSave}
-                        disabled={saving}
-                        className="bg-brand-primary text-white px-8 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-vibrant disabled:opacity-50"
+                        disabled={saving || !hasChanges}
+                        className={cn(
+                            "px-8 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all",
+                            hasChanges 
+                                ? "bg-brand-primary text-white shadow-vibrant scale-105 active:scale-95" 
+                                : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                        )}
                     >
-                        {saving ? 'Syncing...' : 'Save Changes 💾'}
+                        {saving ? 'Syncing...' : hasChanges ? 'Save Changes 💾' : 'Up to Date ✅'}
                     </button>
                 </div>
 
@@ -720,6 +737,29 @@ function SystemSettings({ config }: { config: any }) {
                             value={localConfig.serviceCharge}
                             onChange={(e) => setLocalConfig({...localConfig, serviceCharge: Number(e.target.value)})}
                             className="w-full bg-white border border-gray-100 p-4 rounded-xl font-black text-xs"
+                        />
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-10 mt-10 p-10 bg-brand-accent/30 rounded-3xl border border-brand-accent/50 outline outline-4 outline-white">
+                    <div className="space-y-4">
+                        <p className="text-[10px] font-black text-brand-primary uppercase tracking-widest">Payment: UPI ID (VPA)</p>
+                        <input 
+                            type="text" 
+                            value={localConfig.upiId}
+                            onChange={(e) => setLocalConfig({...localConfig, upiId: e.target.value})}
+                            className="w-full bg-white border border-orange-200 p-4 rounded-xl font-bold text-xs focus:ring-2 ring-brand-primary outline-none"
+                            placeholder="yourname@upi"
+                        />
+                    </div>
+                    <div className="space-y-4">
+                        <p className="text-[10px] font-black text-brand-primary uppercase tracking-widest">Payment: Beneficiary Name</p>
+                        <input 
+                            type="text" 
+                            value={localConfig.upiName}
+                            onChange={(e) => setLocalConfig({...localConfig, upiName: e.target.value})}
+                            className="w-full bg-white border border-orange-200 p-4 rounded-xl font-bold text-xs focus:ring-2 ring-brand-primary outline-none"
+                            placeholder="Restaurant Name"
                         />
                     </div>
                 </div>

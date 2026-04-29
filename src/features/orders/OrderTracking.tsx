@@ -7,6 +7,7 @@ import { CheckCircle2, ChevronLeft, Clock, MapPin, Search, CreditCard, Gift } fr
 import { Order, OrderStatus } from '../../types';
 import { cn } from '../../lib/utils';
 import { QRCodeSVG } from 'qrcode.react';
+import { useCart } from '../../hooks/useCart';
 
 const STATUS_STEPS: { status: OrderStatus; label: string; icon: any; color: string; emoji: string }[] = [
   { status: 'pending', label: 'Order Placed 📝', icon: Clock, color: 'bg-orange-500', emoji: '📝' },
@@ -18,9 +19,12 @@ const STATUS_STEPS: { status: OrderStatus; label: string; icon: any; color: stri
 export default function OrderTracking() {
   const { orderId } = useParams();
   const navigate = useNavigate();
+  const { config } = useCart();
   const [order, setOrder] = useState<Order | null>(null);
   const [showPayment, setShowPayment] = useState(false);
   const [couponCode, setCouponCode] = useState('');
+
+  const upiIntent = `upi://pay?pa=${config.upiId}&pn=${encodeURIComponent(config.upiName)}&am=${order?.total || 0}&cu=INR&tn=${encodeURIComponent('Order ' + (orderId || ''))}`;
 
   useEffect(() => {
     if (!orderId) return;
@@ -225,22 +229,31 @@ export default function OrderTracking() {
             </div>
             
             <div className="bg-gray-50 p-6 rounded-3xl inline-block mx-auto border border-gray-100">
-              <QRCodeSVG value={`upi://pay?pa=desi.cozy@upi&pn=Desi%20Cozy%20Cafe&am=${order.total}&cu=INR`} size={180} />
+              <QRCodeSVG value={upiIntent} size={180} />
             </div>
 
             <div className="space-y-3">
               <p className="font-bold text-lg">₹{order.total}</p>
+              
+              <a 
+                href={upiIntent}
+                className="w-full bg-brand-primary text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-vibrant active:scale-95 transition-transform"
+              >
+                <span>Open in Payment App</span>
+              </a>
+
               <button 
                 onClick={handleMarkPaid} 
-                className="w-full bg-brand-primary text-white py-4 rounded-2xl font-bold"
+                className="w-full bg-gray-50 text-gray-400 py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest hover:text-brand-primary transition-colors"
               >
-                Confirm Payment (Simulation)
+                Simulate Successful Payment (For Demo)
               </button>
+              
               <button 
                 onClick={() => setShowPayment(false)} 
-                className="w-full bg-gray-100 text-gray-500 py-3 rounded-2xl font-bold text-sm"
+                className="w-full text-gray-400 py-2 font-bold text-xs"
               >
-                Cancel
+                Close
               </button>
             </div>
           </motion.div>

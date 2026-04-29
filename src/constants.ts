@@ -72,6 +72,8 @@ export const APP_CONFIG = {
   logo: '🍽️',
   gstPercentage: 5,
   serviceCharge: 0,
+  upiId: 'desi.cozy@upi',
+  upiName: 'Desi Cozy Cafe',
   adminEmails: ['adityaofficial9918@gmail.com'],
 };
 
