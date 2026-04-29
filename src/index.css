@@ -1,0 +1,47 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Playfair Display", serif;
+  
+  --color-brand-primary: #FF5C00;
+  --color-brand-secondary: #FFB800;
+  --color-brand-accent: #FFF5F0;
+  
+  --color-text-main: #1A1614;
+  --color-text-muted: #4A4440;
+  --color-text-subtle: #8A8480;
+  
+  --color-surface-base: #FFFCF9;
+  --color-surface-card: #FFFFFF;
+  --color-surface-input: #F8F5F2;
+  --color-border-main: #F0EDE9;
+
+  --radius-3xl: 1.5rem;
+  --radius-4xl: 2rem;
+  --radius-5xl: 3rem;
+
+  --shadow-premium: 0 10px 40px -10px rgba(255, 92, 0, 0.1);
+  --shadow-vibrant: 0 20px 50px -12px rgba(0, 0, 0, 0.08);
+}
+
+@layer base {
+  body {
+    @apply bg-surface-base text-text-main font-sans antialiased;
+  }
+  
+  h1, h2, h3 {
+    @apply font-display;
+  }
+}
+
+/* Custom scrollbar for mobile category tabs */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+

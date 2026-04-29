@@ -1,0 +1,116 @@
+{
+  "entities": {
+    "MenuItem": {
+      "title": "Menu Item",
+      "description": "A food or beverage item in the cafe menu",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "category": { "type": "string" },
+        "image": { "type": "string" },
+        "isVeg": { "type": "boolean" },
+        "isPopular": { "type": "boolean" },
+        "isRecommended": { "type": "boolean" },
+        "available": { "type": "boolean" }
+      },
+      "required": ["name", "price", "category", "isVeg"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "A customer order from a specific table",
+      "type": "object",
+      "properties": {
+        "tableId": { "type": "string" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "itemId": { "type": "string" },
+              "name": { "type": "string" },
+              "quantity": { "type": "number" },
+              "price": { "type": "number" },
+              "customizations": { "type": "string" }
+            }
+          }
+        },
+        "total": { "type": "number" },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "confirmed", "preparing", "ready", "served", "cancelled"]
+        },
+        "paymentStatus": {
+          "type": "string",
+          "enum": ["unpaid", "paid"]
+        },
+        "paymentMethod": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tableId", "items", "total", "status"]
+    },
+    "Table": {
+      "title": "Table",
+      "description": "A physical table in the restaurant",
+      "type": "object",
+      "properties": {
+        "tableNumber": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["tableNumber"]
+    },
+    "Coupon": {
+      "title": "Coupon",
+      "description": "Discount coupon for customers",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "discountPercent": { "type": "number" },
+        "expiry": { "type": "string", "format": "date-time" },
+        "isUsed": { "type": "boolean" },
+        "userPhone": { "type": "string" }
+      },
+      "required": ["code", "discountPercent"]
+    },
+    "AppSettings": {
+      "title": "App Settings",
+      "description": "Global restaurant configurations",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "logo": { "type": "string" },
+        "gstPercentage": { "type": "number" },
+        "serviceCharge": { "type": "number" },
+        "adminEmails": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  },
+  "firestore": {
+    "menuItems": {
+      "schema": "MenuItem",
+      "description": "Full menu of the cafe"
+    },
+    "orders": {
+      "schema": "Order",
+      "description": "Active and past orders"
+    },
+    "tables": {
+      "schema": "Table",
+      "description": "List of tables in the restaurant"
+    },
+    "coupons": {
+      "schema": "Coupon",
+      "description": "Promotional coupons for retention"
+    },
+    "settings": {
+      "schema": "AppSettings",
+      "description": "Global settings for UI and operations"
+    }
+  }
+}
