@@ -39,6 +39,14 @@ export default function CartDrawer() {
       
       const docRef = await addDoc(collection(db, 'orders'), orderData);
       
+      // Log the event for admins
+      await addDoc(collection(db, 'logs'), {
+        type: 'ORDER_CREATED',
+        message: `New Order #${docRef.id.slice(-6).toUpperCase()} placed for Table ${tableId}`,
+        details: { orderId: docRef.id, tableId, total },
+        timestamp: serverTimestamp()
+      });
+      
       // Celebrate success!
       confetti({
         particleCount: 150,

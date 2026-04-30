@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  collection, query, onSnapshot, orderBy, doc, updateDoc, setDoc, serverTimestamp 
+  collection, query, onSnapshot, orderBy, doc, updateDoc, setDoc, serverTimestamp, limit 
 } from 'firebase/firestore';
 import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { db, auth } from '../../lib/firebase';
@@ -26,6 +26,10 @@ export default function AdminDashboard() {
   const [user, setUser] = useState(auth.currentUser);
   const [authLoading, setAuthLoading] = useState(true);
   const [config, setConfig] = useState(APP_CONFIG);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [showAuditLogs, setShowAuditLogs] = useState(false);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [stats, setStats] = useState({
     revenue: 0,
     totalOrders: 0,
@@ -71,7 +75,43 @@ export default function AdminDashboard() {
       });
     });
     return () => unsub();
-  }, [user]);
+  }, [user, config.adminEmails]);
+
+  // Handle Notifications and Logs
+  useEffect(() => {
+    if (!user || !config.adminEmails.includes(user.email || '')) return;
+
+    // Listen for recent logs/activities
+    const logsQuery = query(collection(db, 'logs'), orderBy('timestamp', 'desc'), limit(20));
+    const unsubLogs = onSnapshot(logsQuery, (snap) => {
+      const logs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setAuditLogs(logs);
+      
+      // Filter logs for notifications (e.g., new orders in the last hour)
+      const recentNotifications = logs.filter((log: any) => {
+        const oneHourAgo = Date.now() - 3600000;
+        return log.type === 'ORDER_CREATED' && (log.timestamp?.toMillis?.() || 0) > oneHourAgo;
+      });
+      setNotifications(recentNotifications);
+    });
+
+    return () => unsubLogs();
+  }, [user, config.adminEmails]);
+
+  const logAction = async (type: string, message: string, details?: any) => {
+    try {
+      await setDoc(doc(collection(db, 'logs')), {
+        type,
+        message,
+        details,
+        adminEmail: user?.email,
+        adminName: user?.displayName,
+        timestamp: serverTimestamp()
+      });
+    } catch (e) {
+      console.error("Logging failed:", e);
+    }
+  };
 
   const handleLogin = async () => {
     const provider = new GoogleAuthProvider();
@@ -193,10 +233,58 @@ export default function AdminDashboard() {
                     <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
                     <span className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Servers Nominal</span>
                 </div>
-                <button className="h-12 w-12 bg-white border border-gray-200 rounded-2xl flex items-center justify-center text-gray-400 hover:text-brand-primary transition-all relative group">
-                    <Bell size={20} />
-                    <div className="absolute top-3 right-3 h-2 w-2 bg-red-500 rounded-full border-2 border-white shadow-sm" />
-                </button>
+                
+                <div className="relative">
+                    <button 
+                        onClick={() => setShowNotifications(!showNotifications)}
+                        className={cn(
+                            "h-12 w-12 bg-white border border-gray-200 rounded-2xl flex items-center justify-center text-gray-400 hover:text-brand-primary transition-all relative group",
+                            showNotifications && "border-brand-primary text-brand-primary shadow-sm"
+                        )}
+                    >
+                        <Bell size={20} />
+                        {notifications.length > 0 && (
+                            <div className="absolute top-3 right-3 h-2 w-2 bg-red-500 rounded-full border-2 border-white shadow-sm animate-pulse" />
+                        )}
+                    </button>
+
+                    <AnimatePresence>
+                        {showNotifications && (
+                            <motion.div 
+                                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                className="absolute right-0 mt-4 w-80 bg-white rounded-[32px] border border-gray-100 shadow-2xl overflow-hidden z-[60]"
+                            >
+                                <div className="p-6 bg-[#1A1B1F] text-white">
+                                    <h4 className="text-xs font-black uppercase tracking-widest">Command Center Alerts 🚨</h4>
+                                </div>
+                                <div className="max-h-96 overflow-y-auto p-4 space-y-3">
+                                    {notifications.length > 0 ? notifications.map((n) => (
+                                        <div key={n.id} className="p-4 bg-gray-50 rounded-2xl border border-gray-100 hover:bg-white hover:border-brand-primary transition-all cursor-pointer">
+                                            <p className="text-[11px] font-black text-gray-900 uppercase leading-tight">{n.message}</p>
+                                            <p className="text-[9px] text-gray-400 font-bold uppercase mt-1 tracking-tighter">
+                                                {n.timestamp?.toDate().toLocaleTimeString()} • Kitchen Direct
+                                            </p>
+                                        </div>
+                                    )) : (
+                                        <div className="py-10 text-center">
+                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">No active alerts</p>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="p-4 border-t border-gray-50 bg-[#F8F9FA]">
+                                    <button 
+                                        onClick={() => setShowNotifications(false)}
+                                        className="w-full py-3 bg-white border border-gray-100 rounded-xl text-[10px] font-black text-gray-500 uppercase tracking-widest hover:text-brand-primary transition-all"
+                                    >
+                                        Collapse Feed
+                                    </button>
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
             </div>
         </header>
 
@@ -209,21 +297,71 @@ export default function AdminDashboard() {
                     exit={{ opacity: 0, y: -15 }}
                     transition={{ duration: 0.3, ease: 'easeOut' }}
                 >
-                    {activeTab === 'Overview' && <DashboardOverview stats={stats} orders={orders} />}
-                    {activeTab === 'Live Orders' && <LiveOrderTracker orders={orders} />}
+                    {activeTab === 'Overview' && <DashboardOverview stats={stats} orders={orders} setShowAuditLogs={setShowAuditLogs} />}
+                    {activeTab === 'Live Orders' && <LiveOrderTracker orders={orders} logAction={logAction} />}
                     {activeTab === 'Menu Manager' && <MenuManager />}
                     {activeTab === 'Analytics' && <AnalyticsDashboard orders={orders} />}
                     {activeTab === 'Customers' && <CustomerInsights orders={orders} />}
-                    {activeTab === 'Settings' && <SystemSettings config={config} />}
+                    {activeTab === 'Settings' && <SystemSettings config={config} logAction={logAction} />}
                 </motion.div>
             </AnimatePresence>
         </main>
       </div>
+
+      <AnimatePresence>
+                {showAuditLogs && (
+                    <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[70] flex items-center justify-center p-6 bg-black/60 backdrop-blur-md"
+                    >
+                        <motion.div 
+                            initial={{ scale: 0.9, opacity: 0, y: 30 }}
+                            animate={{ scale: 1, opacity: 1, y: 0 }}
+                            exit={{ scale: 0.9, opacity: 0, y: 30 }}
+                            className="bg-white w-full max-w-2xl rounded-[48px] shadow-3xl overflow-hidden flex flex-col h-[70vh]"
+                        >
+                            <div className="p-8 bg-[#1A1B1F] text-white flex justify-between items-center">
+                                <div>
+                                    <h3 className="text-xl font-display font-black italic tracking-tight">System Audit Log 🕵️‍♂️</h3>
+                                    <p className="text-[10px] text-white/40 uppercase font-black tracking-widest mt-1">Infrastructure event history</p>
+                                </div>
+                                <button 
+                                    onClick={() => setShowAuditLogs(false)}
+                                    className="h-10 w-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-colors"
+                                >
+                                    <X size={18} />
+                                </button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-6 space-y-4 no-scrollbar">
+                                {auditLogs.length > 0 ? auditLogs.map((log) => (
+                                    <div key={log.id} className="p-5 rounded-3xl border border-gray-50 bg-[#F8F9FA] hover:border-brand-primary/20 transition-all flex items-start gap-4">
+                                        <div className="h-10 w-10 rounded-xl bg-white border border-gray-100 flex items-center justify-center text-xs shadow-sm">
+                                            {log.type === 'ORDER_CREATED' ? '📝' : '⚙️'}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-xs font-black text-gray-900 uppercase tracking-tight">{log.message}</p>
+                                            <p className="text-[10px] text-gray-400 font-bold mt-1">
+                                                {log.adminName || 'System'} • {log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString() : 'Just now'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                )) : (
+                                    <div className="h-full flex flex-col items-center justify-center text-gray-300">
+                                        <p className="text-sm font-black uppercase tracking-[0.2em] italic">Log storage empty</p>
+                                    </div>
+                                )}
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
     </div>
   );
 }
 
-function DashboardOverview({ stats, orders }: { stats: any, orders: Order[] }) {
+function DashboardOverview({ stats, orders, setShowAuditLogs }: { stats: any, orders: Order[], setShowAuditLogs: (v: boolean) => void }) {
     const recentOrders = orders.slice(0, 5);
     const chartData = orders.slice(0, 10).reverse().map((o, i) => ({
         name: `O#${o.id.slice(-4).toUpperCase()}`,
@@ -299,7 +437,10 @@ function DashboardOverview({ stats, orders }: { stats: any, orders: Order[] }) {
                             </div>
                         ))}
                     </div>
-                    <button className="w-full mt-10 py-5 rounded-[24px] border-2 border-dashed border-gray-100 text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] hover:border-brand-primary hover:text-brand-primary transition-all">
+                    <button 
+                        onClick={() => setShowAuditLogs(true)}
+                        className="w-full mt-10 py-5 rounded-[24px] border-2 border-dashed border-gray-100 text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] hover:border-brand-primary hover:text-brand-primary transition-all"
+                    >
                         View Audit History
                     </button>
                 </div>
@@ -308,7 +449,7 @@ function DashboardOverview({ stats, orders }: { stats: any, orders: Order[] }) {
     );
 }
 
-function LiveOrderTracker({ orders }: { orders: Order[] }) {
+function LiveOrderTracker({ orders, logAction }: { orders: Order[], logAction: any }) {
     const liveOrders = orders.filter(o => ['pending', 'confirmed', 'preparing'].includes(o.status));
 
     return (
@@ -365,6 +506,7 @@ function LiveOrderTracker({ orders }: { orders: Order[] }) {
                                     const nextStatus = order.status === 'pending' ? 'confirmed' : 
                                                     order.status === 'confirmed' ? 'preparing' : 'ready';
                                     await updateDoc(doc(db, 'orders', order.id), { status: nextStatus, updatedAt: serverTimestamp() });
+                                    logAction('ORDER_STATUS_UPDATE', `Order #${order.id.slice(-6).toUpperCase()} transitioned to ${nextStatus.toUpperCase()}`, { orderId: order.id, status: nextStatus });
                                 }}
                                 className="flex-1 bg-brand-primary text-white py-5 rounded-[24px] font-black text-xs uppercase tracking-[0.2em] shadow-vibrant active:scale-95 transition-all text-center"
                             >
@@ -651,7 +793,7 @@ function CustomerInsights({ orders }: { orders: Order[] }) {
   )
 }
 
-function SystemSettings({ config }: { config: any }) {
+function SystemSettings({ config, logAction }: { config: any, logAction: any }) {
     const [localConfig, setLocalConfig] = useState(config);
     const [saving, setSaving] = useState(false);
     const [newAdmin, setNewAdmin] = useState('');
@@ -664,12 +806,12 @@ function SystemSettings({ config }: { config: any }) {
         }
     }, [config, saving]);
 
-    const handleSave = async () => {
+    const handleSave = async (updatedConfig = localConfig) => {
         setSaving(true);
         try {
-            // Use setDoc with merge: true to handle cases where the document might not exist
-            await setDoc(doc(db, 'settings', 'global'), localConfig, { merge: true });
-            alert('Enterprise configuration synchronized! 🚀');
+            await setDoc(doc(db, 'settings', 'global'), updatedConfig, { merge: true });
+            logAction('SETTINGS_UPDATE', 'System infrastructure & financial configurations updated');
+            alert('Infrastructure updated successfully! 🛡️');
         } catch (e) {
             console.error("Settings Sync Error:", e);
             alert('Failed to sync settings. Ensure you have administrative privileges.');
@@ -678,13 +820,44 @@ function SystemSettings({ config }: { config: any }) {
         }
     };
 
+    const addAdmin = () => {
+        if (newAdmin && !localConfig.adminEmails.includes(newAdmin)) {
+            const updated = {
+                ...localConfig, 
+                adminEmails: [...localConfig.adminEmails, newAdmin]
+            };
+            setLocalConfig(updated);
+            logAction('ADMIN_ADDED', `New security clearing granted to ${newAdmin}`);
+            setNewAdmin('');
+            // Optional: Auto-save on critical identity changes
+            // handleSave(updated); 
+        }
+    };
+
+    const removeAdmin = (email: string) => {
+        const updated = {
+            ...localConfig, 
+            adminEmails: localConfig.adminEmails.filter((e: string) => e !== email)
+        };
+        setLocalConfig(updated);
+        logAction('ADMIN_REMOVED', `Security credentials revoked for ${email}`);
+    };
+
     return (
-        <div className="max-w-4xl space-y-12">
-            <div className="bg-white p-12 lg:p-14 rounded-[56px] border border-[#E0E2E7] shadow-sm">
+        <div className="max-w-4xl space-y-12 pb-20">
+            <div className="bg-white p-12 lg:p-14 rounded-[56px] border border-[#E0E2E7] shadow-sm relative overflow-hidden">
+                {/* Visual indicator for unsaved changes */}
+                {hasChanges && (
+                    <div className="absolute top-0 left-0 right-0 h-1 bg-brand-primary animate-pulse" />
+                )}
+
                 <div className="flex justify-between items-center mb-12">
-                    <h3 className="text-2xl font-display font-black text-gray-900 italic tracking-tight">Enterprise Infrastructure ⚙️</h3>
+                    <div>
+                        <h3 className="text-2xl font-display font-black text-gray-900 italic tracking-tight">Enterprise Infrastructure ⚙️</h3>
+                        {hasChanges && <p className="text-[10px] font-black text-brand-primary uppercase mt-1">You have unsaved configuration changes!</p>}
+                    </div>
                     <button 
-                        onClick={handleSave}
+                        onClick={() => handleSave()}
                         disabled={saving || !hasChanges}
                         className={cn(
                             "px-8 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all",
@@ -693,7 +866,7 @@ function SystemSettings({ config }: { config: any }) {
                                 : "bg-gray-100 text-gray-400 cursor-not-allowed"
                         )}
                     >
-                        {saving ? 'Syncing...' : hasChanges ? 'Save Changes 💾' : 'Up to Date ✅'}
+                        {saving ? 'Syncing...' : hasChanges ? 'Save All Changes 💾' : 'System Optimized ✅'}
                     </button>
                 </div>
 
@@ -720,7 +893,7 @@ function SystemSettings({ config }: { config: any }) {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-10 mt-10 p-10 bg-[#F8F9FA] rounded-3xl border border-gray-50">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-10 mt-10 p-10 bg-[#F8F9FA] rounded-3xl border border-gray-100/50">
                     <div className="space-y-4">
                         <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Financial: GST (%)</p>
                         <input 
@@ -765,36 +938,42 @@ function SystemSettings({ config }: { config: any }) {
                 </div>
 
                 <div className="mt-12 space-y-6">
-                    <h4 className="text-sm font-black text-gray-900 uppercase tracking-widest">Management Council (Admins) 👑</h4>
+                    <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-black text-gray-900 uppercase tracking-widest">Management Council (Admins) 👑</h4>
+                        <span className="text-[9px] font-black text-brand-primary bg-brand-primary/10 px-3 py-1 rounded-full uppercase tracking-widest">
+                            {localConfig.adminEmails.length} Authorized
+                        </span>
+                    </div>
+
                     <div className="flex gap-4">
                         <input 
                             type="email" 
                             value={newAdmin}
                             onChange={(e) => setNewAdmin(e.target.value)}
-                            placeholder="ADD ADMIN EMAIL"
-                            className="flex-1 bg-[#F8F9FA] border border-gray-100 p-4 rounded-xl text-xs font-bold"
+                            onKeyDown={(e) => e.key === 'Enter' && addAdmin()}
+                            placeholder="ADD NEW ADMIN EMAIL..."
+                            className="flex-1 bg-[#F8F9FA] border border-gray-100 p-5 rounded-2xl text-xs font-black uppercase tracking-wider focus:border-brand-primary outline-none transition-all shadow-inner"
                         />
                         <button 
-                            onClick={() => {
-                                if (newAdmin && !localConfig.adminEmails.includes(newAdmin)) {
-                                    setLocalConfig({...localConfig, adminEmails: [...localConfig.adminEmails, newAdmin]});
-                                    setNewAdmin('');
-                                }
-                            }}
-                            className="bg-[#1A1B1F] text-white px-6 rounded-xl text-[10px] font-black uppercase"
+                            onClick={addAdmin}
+                            className="bg-[#1A1B1F] text-white px-10 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg hover:bg-brand-primary transition-all active:scale-95"
                         >
                             ADD
                         </button>
                     </div>
-                    <div className="flex flex-wrap gap-3">
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {localConfig.adminEmails.map((email: string) => (
-                            <div key={email} className="bg-white border border-gray-100 px-4 py-2 rounded-xl flex items-center gap-3">
-                                <span className="text-[10px] font-bold text-gray-500">{email}</span>
+                            <div key={email} className="bg-white border border-gray-100 p-4 rounded-2xl flex items-center justify-between group hover:border-brand-primary transition-all shadow-sm">
+                                <div className="flex items-center gap-3">
+                                    <div className="h-2 w-2 rounded-full bg-green-500" />
+                                    <span className="text-xs font-bold text-gray-700 truncate max-w-[180px]">{email}</span>
+                                </div>
                                 <button 
-                                    onClick={() => setLocalConfig({...localConfig, adminEmails: localConfig.adminEmails.filter((e: string) => e !== email)})}
-                                    className="text-red-500 hover:scale-110 transition-transform"
+                                    onClick={() => removeAdmin(email)}
+                                    className="text-gray-300 hover:text-red-500 transition-colors p-2 hover:bg-red-50 rounded-lg"
                                 >
-                                    <X size={14} />
+                                    <X size={16} />
                                 </button>
                             </div>
                         ))}
@@ -803,6 +982,7 @@ function SystemSettings({ config }: { config: any }) {
             </div>
         </div>
     );
+
 }
 
 function SettingRow({ label, description, active = false }: any) {
