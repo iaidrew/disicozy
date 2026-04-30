@@ -23,19 +23,15 @@
       "type": "object",
       "properties": {
         "tableId": { "type": "string" },
+        "customerId": { "type": "string" },
+        "customerEmail": { "type": "string" },
         "items": {
           "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "itemId": { "type": "string" },
-              "name": { "type": "string" },
-              "quantity": { "type": "number" },
-              "price": { "type": "number" },
-              "customizations": { "type": "string" }
-            }
-          }
+          "items": { "type": "object" }
         },
+        "subtotal": { "type": "number" },
+        "taxes": { "type": "number" },
+        "serviceCharge": { "type": "number" },
         "total": { "type": "number" },
         "status": {
           "type": "string",
@@ -45,12 +41,24 @@
           "type": "string",
           "enum": ["unpaid", "paid"]
         },
-        "paymentMethod": { "type": "string" },
-        "customerPhone": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["tableId", "items", "total", "status"]
+      "required": ["tableId", "customerId", "items", "total", "status", "paymentStatus"]
+    },
+    "Log": {
+      "title": "System Log",
+      "description": "Infrastructure and operational events for audit",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string" },
+        "message": { "type": "string" },
+        "details": { "type": "object" },
+        "adminEmail": { "type": "string" },
+        "adminName": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["type", "message", "timestamp"]
     },
     "Table": {
       "title": "Table",
@@ -111,6 +119,10 @@
     "settings": {
       "schema": "AppSettings",
       "description": "Global settings for UI and operations"
+    },
+    "logs": {
+      "schema": "Log",
+      "description": "System operational and security events"
     }
   }
 }

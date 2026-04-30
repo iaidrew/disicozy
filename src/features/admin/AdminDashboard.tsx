@@ -37,6 +37,9 @@ export default function AdminDashboard() {
     activeTables: 0
   });
 
+  const isPrimaryAdmin = user?.email === "adityaofficial9918@gmail.com";
+  const isAuthorized = isPrimaryAdmin || config.adminEmails.includes(user?.email || '');
+
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u);
@@ -56,7 +59,7 @@ export default function AdminDashboard() {
   }, []);
 
   useEffect(() => {
-    if (!user || !config.adminEmails.includes(user.email || '')) return;
+    if (!user || !isAuthorized) return;
 
     const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
     const unsub = onSnapshot(q, (snap) => {
@@ -79,7 +82,7 @@ export default function AdminDashboard() {
 
   // Handle Notifications and Logs
   useEffect(() => {
-    if (!user || !config.adminEmails.includes(user.email || '')) return;
+    if (!user || !isAuthorized) return;
 
     // Listen for recent logs/activities
     const logsQuery = query(collection(db, 'logs'), orderBy('timestamp', 'desc'), limit(20));
@@ -130,7 +133,7 @@ export default function AdminDashboard() {
     );
   }
 
-  if (!user || !config.adminEmails.includes(user.email || '')) {
+  if (!user || !isAuthorized) {
     return (
       <div className="h-screen bg-[#F0F1F3] flex items-center justify-center p-6">
         <div className="bg-white p-12 rounded-[40px] shadow-premium max-w-md w-full text-center space-y-8 border border-border-main">
@@ -262,25 +265,28 @@ export default function AdminDashboard() {
                                 <div className="max-h-96 overflow-y-auto p-4 space-y-3">
                                     {notifications.length > 0 ? notifications.map((n) => (
                                         <div key={n.id} className="p-4 bg-gray-50 rounded-2xl border border-gray-100 hover:bg-white hover:border-brand-primary transition-all cursor-pointer">
-                                            <p className="text-[11px] font-black text-gray-900 uppercase leading-tight">{n.message}</p>
-                                            <p className="text-[9px] text-gray-400 font-bold uppercase mt-1 tracking-tighter">
-                                                {n.timestamp?.toDate().toLocaleTimeString()} • Kitchen Direct
-                                            </p>
+                                            <div className="flex justify-between items-center transition-opacity hover:opacity-80">
+                                                <p className="text-[11px] font-black text-gray-900 uppercase leading-tight">{n.message}</p>
+                                                <p className="text-[9px] text-gray-400 font-bold uppercase mt-1 tracking-tighter shrink-0">
+                                                    {n.timestamp?.toDate ? n.timestamp.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'JUST NOW'}
+                                                </p>
+                                            </div>
                                         </div>
                                     )) : (
-                                        <div className="py-10 text-center">
-                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">No active alerts</p>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="p-4 border-t border-gray-50 bg-[#F8F9FA]">
-                                    <button 
-                                        onClick={() => setShowNotifications(false)}
-                                        className="w-full py-3 bg-white border border-gray-100 rounded-xl text-[10px] font-black text-gray-500 uppercase tracking-widest hover:text-brand-primary transition-all"
-                                    >
-                                        Collapse Feed
-                                    </button>
-                                </div>
+                    <div className="py-12 text-center flex flex-col items-center justify-center opacity-40 grayscale">
+                        <Bell size={32} className="mb-3" />
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Zero Feed Activity</p>
+                    </div>
+                )}
+            </div>
+            <div className="p-4 border-t border-gray-50 bg-[#F8F9FA]">
+                <button 
+                    onClick={() => { setShowNotifications(false); setShowAuditLogs(true); }}
+                    className="w-full py-4 bg-white border border-gray-100 rounded-2xl text-[10px] font-black text-brand-primary uppercase tracking-widest hover:bg-brand-primary hover:text-white transition-all shadow-sm"
+                >
+                    View Operational Logs 📜
+                </button>
+            </div>
                             </motion.div>
                         )}
                     </AnimatePresence>
@@ -302,7 +308,7 @@ export default function AdminDashboard() {
                     {activeTab === 'Menu Manager' && <MenuManager />}
                     {activeTab === 'Analytics' && <AnalyticsDashboard orders={orders} />}
                     {activeTab === 'Customers' && <CustomerInsights orders={orders} />}
-                    {activeTab === 'Settings' && <SystemSettings config={config} logAction={logAction} />}
+                    {activeTab === 'Settings' && <SystemSettings config={config} logAction={logAction} user={user} />}
                 </motion.div>
             </AnimatePresence>
         </main>
@@ -512,7 +518,15 @@ function LiveOrderTracker({ orders, logAction }: { orders: Order[], logAction: a
                             >
                                 {order.status === 'pending' ? 'ACCEPT ✅' : order.status === 'confirmed' ? 'PREPARING 🥘' : 'READY 🍽️'}
                             </button>
-                            <button className="h-14 w-14 rounded-[24px] bg-[#FEF2F2] flex items-center justify-center text-red-500 border border-red-100 hover:bg-red-500 hover:text-white transition-all shadow-sm">
+                            <button 
+                                onClick={async () => {
+                                    if (confirm('Are you sure you want to cancel this order?')) {
+                                        await updateDoc(doc(db, 'orders', order.id), { status: 'cancelled', updatedAt: serverTimestamp() });
+                                        logAction('ORDER_CANCELLED', `Order #${order.id.slice(-6).toUpperCase()} was revoked by command`, { orderId: order.id });
+                                    }
+                                }}
+                                className="h-14 w-14 rounded-[24px] bg-[#FEF2F2] flex items-center justify-center text-red-500 border border-red-100 hover:bg-red-500 hover:text-white transition-all shadow-sm"
+                            >
                                 <X size={20} />
                             </button>
                         </div>
@@ -793,7 +807,7 @@ function CustomerInsights({ orders }: { orders: Order[] }) {
   )
 }
 
-function SystemSettings({ config, logAction }: { config: any, logAction: any }) {
+function SystemSettings({ config, logAction, user }: { config: any, logAction: any, user: any }) {
     const [localConfig, setLocalConfig] = useState(config);
     const [saving, setSaving] = useState(false);
     const [newAdmin, setNewAdmin] = useState('');
@@ -820,26 +834,31 @@ function SystemSettings({ config, logAction }: { config: any, logAction: any }) 
         }
     };
 
-    const addAdmin = () => {
+    const addAdmin = async () => {
         if (newAdmin && !localConfig.adminEmails.includes(newAdmin)) {
             const updated = {
                 ...localConfig, 
                 adminEmails: [...localConfig.adminEmails, newAdmin]
             };
             setLocalConfig(updated);
-            logAction('ADMIN_ADDED', `New security clearing granted to ${newAdmin}`);
             setNewAdmin('');
-            // Optional: Auto-save on critical identity changes
-            // handleSave(updated); 
+            // Forced sync for identity changes to reflect instantly for others
+            await handleSave(updated); 
+            logAction('ADMIN_ADDED', `New security clearing granted to ${newAdmin}`);
         }
     };
 
-    const removeAdmin = (email: string) => {
+    const removeAdmin = async (email: string) => {
+        if (email === user?.email) {
+            alert("Security Protocol: You cannot revoke your own administrative status.");
+            return;
+        }
         const updated = {
             ...localConfig, 
             adminEmails: localConfig.adminEmails.filter((e: string) => e !== email)
         };
         setLocalConfig(updated);
+        await handleSave(updated);
         logAction('ADMIN_REMOVED', `Security credentials revoked for ${email}`);
     };
 
